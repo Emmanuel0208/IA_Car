@@ -14,6 +14,7 @@ public class IA : MonoBehaviour
     Matriz entradas;
     float acceleration;
     float rotation;
+    float pitch; // Control de inclinación para aviones
     public float score;
     bool lost = false;
 
@@ -23,141 +24,150 @@ public class IA : MonoBehaviour
     float accelerationPR = 0;
     int accelerationProm = 0;
 
+    // Parámetros para mejorar el movimiento hacia adelante
+    public float maxRotationAngle = 10f; // Limitar más la rotación
+    public float forwardAcceleration = 0.5f; // Aceleración mínima hacia adelante
+    public float rotationThreshold = 0.1f; // Rango muerto para giros pequeños
+
     // Start is called before the first frame update
     void Start()
     {
-        pesos = new Matriz[capas];
-        biases = new Matriz[capas];
-        entradas = new Matriz(1, 3);
-
-        for (int i = 0; i < capas; i++)
-        {
-            if(i == 0)
-            {
-                pesos[i] = new Matriz(3, neuronas);
-                pesos[i].RandomInitialize();
-                biases[i] = new Matriz(1, 3);
-                biases[i].RandomInitialize();
-            }
-            else if(i == capas - 1)
-            {
-                pesos[i] = new Matriz(2, neuronas);
-                pesos[i].RandomInitialize();
-                biases[i] = new Matriz(1, 2);
-                biases[i].RandomInitialize();
-            }
-            else
-            {
-                pesos[i] = new Matriz(neuronas, neuronas);
-                pesos[i].RandomInitialize();
-                biases[i] = new Matriz(1, neuronas);
-                biases[i].RandomInitialize();
-            }
-        }
-        
+        Initialize(); // Inicializa todo al principio
     }
 
     public void Initialize()
     {
         pesos = new Matriz[capas];
         biases = new Matriz[capas];
-        entradas = new Matriz(1, 3);
+        entradas = new Matriz(1, 5); // 5 entradas: FD, RD, LD, UD, DD
 
         for (int i = 0; i < capas; i++)
         {
             if (i == 0)
             {
-                pesos[i] = new Matriz(3, neuronas);
+                pesos[i] = new Matriz(5, neuronas); // 5 entradas en la primera capa
                 pesos[i].RandomInitialize();
-                biases[i] = new Matriz(1, 3);
+                biases[i] = new Matriz(1, 5);
                 biases[i].RandomInitialize();
             }
             else if (i == capas - 1)
             {
-                pesos[i] = new Matriz(2, neuronas);
+                pesos[i] = new Matriz(3, neuronas); // 3 salidas (rotation, acceleration, pitch)
                 pesos[i].RandomInitialize();
-                biases[i] = new Matriz(1, 2);
+                biases[i] = new Matriz(1, 3);
                 biases[i].RandomInitialize();
             }
             else
             {
-                pesos[i] = new Matriz(neuronas, neuronas);
+                pesos[i] = new Matriz(neuronas, neuronas); // Capas ocultas
                 pesos[i].RandomInitialize();
                 biases[i] = new Matriz(1, neuronas);
                 biases[i].RandomInitialize();
             }
         }
+
+        // Debug para asegurarnos de que todo se inicializa correctamente
+        Debug.Log("Matrices inicializadas correctamente en IA");
     }
 
     // Update is called once per frame
     void Update()
     {
-        if(!lost)
+        if (!lost)
         {
+            // Obtén las distancias desde el script Car
             float FD = GetComponent<Car>().ForwardDistance;
             float RD = GetComponent<Car>().RightDistance;
             float LD = GetComponent<Car>().LeftDistance;
+            float UD = GetComponent<Car>().UpDistance;
+            float DD = GetComponent<Car>().DownDistance;
+
+            // Asigna las entradas a la red neuronal
             entradas.SetAt(0, 0, FD);
             entradas.SetAt(0, 1, RD);
             entradas.SetAt(0, 2, LD);
-            resolve();
+            entradas.SetAt(0, 3, UD);
+            entradas.SetAt(0, 4, DD);
 
-            transform.Translate(Vector3.forward * acceleration);
-            //transform.rotation = Quaternion.Euler(0, rotation *30, 0);
-            transform.eulerAngles = transform.eulerAngles + new Vector3(0, (rotation * 90) * 0.02f, 0);
+            resolve(); // Resuelve la red neuronal
 
+            // Rango muerto: Ignora giros muy pequeños
+            if (Mathf.Abs(rotation) < rotationThreshold)
+            {
+                rotation = 0;
+            }
+
+            // Limitamos la rotación para evitar giros bruscos
+            float limitedRotation = Mathf.Clamp(rotation, -maxRotationAngle, maxRotationAngle);
+
+            // Aseguramos que siempre haya una aceleración mínima hacia adelante
+            float adjustedAcceleration = Mathf.Max(acceleration, forwardAcceleration);
+
+            // Movimiento en 3D (avión) con rotación limitada y aceleración constante hacia adelante
+            transform.Translate(Vector3.forward * adjustedAcceleration);
+            transform.eulerAngles = transform.eulerAngles + new Vector3(pitch * 90 * 0.02f, limitedRotation * 90 * 0.02f, 0);
+
+            // Calcular la distancia recorrida
             distanceTraveled += Vector3.Distance(transform.position, lastPosition);
             lastPosition = transform.position;
             accelerationPR += acceleration;
             accelerationProm++;
             SetScore();
-            //scoreText.text = score.ToString();
         }
-        
     }
 
+    // Resuelve la red neuronal
     void resolve()
     {
         Matriz result;
         result = Activation((entradas * pesos[0]) + biases[0]);
         for (int i = 1; i < capas; i++)
         {
-            //result = result * (Activation((pesos[i] * entradas) + biases[i]));
-            result = (Activation((pesos[i] * result.Transpose()) + biases[i]));
+            result = Activation((pesos[i] * result.Transpose()) + biases[i]);
         }
-        ActivationLast(result);
+        ActivationLast(result); // Última activación para obtener los valores de salida
     }
 
-
+    // Función de activación (tangente hiperbólica) para las capas intermedias
     Matriz Activation(Matriz m)
     {
         for (int i = 0; i < m.rows; i++)
         {
             for (int j = 0; j < m.columns; j++)
             {
-                //m.SetAt(i, j, MathL.Sigmoid(m.GetAt(i, j)));
                 m.SetAt(i, j, (float)MathL.HyperbolicTangtent(m.GetAt(i, j)));
             }
         }
         return m;
     }
 
+    // Función de activación para la última capa (obtiene rotation, acceleration, pitch)
     void ActivationLast(Matriz m)
     {
-        rotation = (float)MathL.HyperbolicTangtent(m.GetAt(0, 0));
-        acceleration = MathL.Sigmoid(m.GetAt(1, 0));
+        rotation = (float)MathL.HyperbolicTangtent(m.GetAt(0, 0)); // Rotación limitada
+        acceleration = MathL.Sigmoid(m.GetAt(1, 0)); // Mantener la aceleración normal
+        pitch = (float)MathL.HyperbolicTangtent(m.GetAt(2, 0)); // Añadir control de pitch (inclinación)
     }
 
-    void SetScore()//FitnessFunction
+    // Función para calcular el puntaje (fitness)
+    void SetScore()
     {
         float FD = GetComponent<Car>().ForwardDistance;
         float RD = GetComponent<Car>().RightDistance;
         float LD = GetComponent<Car>().LeftDistance;
         float s = (FD + RD + LD) / 3;
-        s += ((distanceTraveled*8) + (acceleration));
-        score += (float)Math.Pow(s,2);
+
+        // Penalizar giros bruscos o frecuentes
+        if (Mathf.Abs(rotation) > rotationThreshold)
+        {
+            s -= Mathf.Abs(rotation); // Penalización basada en la magnitud de la rotación
+        }
+
+        s += ((distanceTraveled * 8) + (acceleration));
+        score += (float)Math.Pow(s, 2);
     }
 
+    // Detectar colisión con una pared
     private void OnTriggerEnter(Collider other)
     {
         if (other.tag == "Wall")

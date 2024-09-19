@@ -4,143 +4,207 @@ using UnityEngine.UI;
 
 public class Genetics : MonoBehaviour
 {
-    public Text EpochsText;
-    public int epochs = 0;
-    public GameObject prefab;
-    public static int carsAlive;
+    // Variables públicas para controlar el estado del juego y la genética
+    public Text EpochsText;               // Texto para mostrar el número de épocas
+    public int epochs = 0;                // Número de épocas actuales
+    public GameObject prefab;             // Prefab del coche
+    public static int carsAlive;          // Número de coches vivos
 
-    public int poblacion = 30;
-    public float probDeMutacion = .05f;
+    // Parámetros del algoritmo genético
+    public int poblacion = 30;            // Tamaño de la población
+    public float probDeMutacion = .05f;   // Probabilidad de mutación
+    public int mejoresCromosomas = 5;     // Número de mejores cromosomas que se conservarán
+    public int peoresCromosomas = 2;      // Número de peores cromosomas que se conservarán
+    public int cromosomasParaMutar = 20;  // Número de cromosomas a mutar
+    public int mutacionesporCromosoma = 5;// Número de mutaciones por cromosoma
 
-    public int mejoresCromosomas = 5;
-    public int peoresCromosomas = 2;
-    public int cromosomasParaMutar = 20;
-    public int mutacionesporCromosoma = 5;
-
+    // Listas para almacenar los coches actuales y la nueva generación
     private List<GameObject> Cars;
     private List<GameObject> newerCars;
 
-    // Start is called before the first frame update
+    // Método Start: Inicializa la población
     void Start()
     {
-        carsAlive = poblacion;
-        Cars = new List<GameObject>();
-        newerCars = new List<GameObject>();
-        for(int i = 0; i < poblacion; i++)
+        carsAlive = poblacion;            // Inicializar el contador de coches vivos
+        Cars = new List<GameObject>();    // Crear la lista de coches actuales
+        newerCars = new List<GameObject>(); // Crear la lista de coches para la próxima generación
+
+        // Crear la población inicial de coches
+        for (int i = 0; i < poblacion; i++)
         {
             GameObject newObject = Instantiate(prefab) as GameObject;
-            Cars.Add(newObject);
+            Cars.Add(newObject);          // Añadir el coche a la lista de coches
         }
     }
 
-    // Update is called once per frame
+    // Método Update: Controla el ciclo de vida de cada época
     void Update()
     {
+        // Actualizar el texto en pantalla con el número de épocas
         EpochsText.text = "Epochs: " + epochs.ToString();
-        if(carsAlive <= 0)
+
+        // Si no quedan coches vivos, pasa a la siguiente época
+        if (carsAlive <= 0)
         {
-            NextEpoch();
-            DeleteCars();
-            carsAlive = poblacion;
-            epochs++;
+            NextEpoch();      // Crear la nueva generación de coches
+            DeleteCars();     // Borrar la población actual
+            carsAlive = poblacion;  // Restablecer el número de coches vivos
+            epochs++;         // Incrementar el número de épocas
         }
     }
 
+    // Elimina todos los coches de la generación actual
     void DeleteCars()
     {
-        for(int i = 0; i < Cars.Count; i++)
+        for (int i = 0; i < Cars.Count; i++)
         {
-            Destroy(Cars[i]);
+            Destroy(Cars[i]);  // Destruir cada coche
         }
-        Cars.Clear();
-        Cars = newerCars;
+        Cars.Clear();          // Vaciar la lista de coches actuales
+        Cars = newerCars;      // Asignar la nueva generación de coches a la lista de coches actuales
     }
 
+    // Método NextEpoch: Genera la próxima generación de coches
     void NextEpoch()
     {
+        // Ordenar los coches según su puntaje (mejores a peores)
         Cars.Sort((x, y) => x.GetComponent<IA>().score.CompareTo(y.GetComponent<IA>().score));
-        List<GameObject> CarsNew;
-        CarsNew = new List<GameObject>();
+        List<GameObject> CarsNew = new List<GameObject>();
+
+        // Copiar los mejores coches a la nueva generación
         for (int i = 0; i < mejoresCromosomas; i++)
         {
-            CarsNew.Add(Copy(Cars[poblacion - 1 - i]));
+            CarsNew.Add(Copy(Cars[poblacion - 1 - i]));  // Copiar los mejores
         }
-        for(int i = 0; i < peoresCromosomas; i++)
+
+        // Copiar algunos de los peores coches
+        for (int i = 0; i < peoresCromosomas; i++)
         {
-            CarsNew.Add(Copy(Cars[i]));
+            CarsNew.Add(Copy(Cars[i]));  // Copiar los peores
         }
+
         int k = mejoresCromosomas + peoresCromosomas;
 
-        //for (int i = 0; i < CarsNew.Count; i++)
-        //{
-        //    Instantiate(CarsNew[i]);
-        //}
-
+        // Generar el resto de la población cruzando coches
         while (k < poblacion)
         {
-            int n1 = UnityEngine.Random.Range(0, k - 1);
-            int n2 = UnityEngine.Random.Range(0, k - 1);
-            CarsNew.Add(Cross(CarsNew[n1], CarsNew[n2]));
+            int n1 = UnityEngine.Random.Range(0, k - 1);  // Seleccionar coche aleatorio
+            int n2 = UnityEngine.Random.Range(0, k - 1);  // Seleccionar otro coche aleatorio
+            CarsNew.Add(Cross(CarsNew[n1], CarsNew[n2])); // Cruzar ambos coches
             k++;
         }
-        //mutate
-        
+
+        // Aplicar mutaciones a algunos coches
         for (int i = 0; i < cromosomasParaMutar; i++)
         {
-            //Debug.Log("1");
             int n1 = UnityEngine.Random.Range(0, poblacion - 1);
             IA iaN = CarsNew[n1].GetComponent<IA>();
 
-            //Debug.Log("2");
-            for (int j = 0; j < iaN.biases.Length; j++)
+            // Verificar antes de mutar biases
+            if (iaN.biases != null)
             {
-                CarsNew[n1].GetComponent<IA>().biases[j].Mutate(mutacionesporCromosoma);
+                for (int j = 0; j < iaN.biases.Length; j++)
+                {
+                    if (iaN.biases[j] != null)
+                    {
+                        CarsNew[n1].GetComponent<IA>().biases[j].Mutate(mutacionesporCromosoma);
+                    }
+                }
             }
-            //Debug.Log("3");
-            for (int j = 0; j < iaN.pesos.Length; j++)
+
+            // Verificar antes de mutar pesos
+            if (iaN.pesos != null)
             {
-                CarsNew[n1].GetComponent<IA>().pesos[j].Mutate(mutacionesporCromosoma);
+                for (int j = 0; j < iaN.pesos.Length; j++)
+                {
+                    if (iaN.pesos[j] != null)
+                    {
+                        CarsNew[n1].GetComponent<IA>().pesos[j].Mutate(mutacionesporCromosoma);
+                    }
+                }
             }
         }
-        newerCars = CarsNew;
+
+        newerCars = CarsNew;  // Actualizar la lista de la nueva generación
     }
 
+    // Función Cross: Cruza dos coches y genera un nuevo coche
     GameObject Cross(GameObject g1, GameObject g2)
     {
         GameObject newObject = Instantiate(prefab) as GameObject;
-        GameObject r = newObject;
-        r.GetComponent<IA>().Initialize();
         IA ia1 = g1.GetComponent<IA>();
         IA ia2 = g2.GetComponent<IA>();
 
-        for(int i = 0; i < ia1.biases.Length; i++)
+        // Inicializar el nuevo coche
+        GameObject r = newObject;
+        r.GetComponent<IA>().Initialize();
+
+        // Cruzar los biases entre ambos coches
+        for (int i = 0; i < ia1.biases.Length; i++)
         {
-            r.GetComponent<IA>().biases[i] = Matriz.SinglePointCross(ia1.biases[i], ia2.biases[i]);
+            if (ia1.biases[i] != null && ia2.biases[i] != null)
+            {
+                r.GetComponent<IA>().biases[i] = Matriz.SinglePointCross(ia1.biases[i], ia2.biases[i]);
+            }
         }
 
+        // Cruzar los pesos entre ambos coches
         for (int i = 0; i < ia1.pesos.Length; i++)
         {
-            r.GetComponent<IA>().pesos[i] = Matriz.SinglePointCross(ia1.pesos[i], ia2.pesos[i]);
+            if (ia1.pesos[i] != null && ia2.pesos[i] != null)
+            {
+                r.GetComponent<IA>().pesos[i] = Matriz.SinglePointCross(ia1.pesos[i], ia2.pesos[i]);
+            }
         }
-        return r;
+
+        return r;  // Retornar el nuevo coche
     }
 
+    // Función Copy: Copia un coche existente y crea uno nuevo idéntico
     GameObject Copy(GameObject c)
     {
         GameObject newObject = Instantiate(prefab) as GameObject;
         GameObject r = newObject;
-        r.GetComponent<IA>().Initialize();
         IA ia1 = c.GetComponent<IA>();
+        r.GetComponent<IA>().Initialize(); // Inicializar matrices
 
-        for (int i = 0; i < ia1.biases.Length; i++)
+        // Verificaciones para depuración
+        if (ia1 == null) { Debug.LogError("Error: ia1 es null"); }
+        if (ia1.biases == null) { Debug.LogError("Error: ia1.biases es null"); }
+        if (ia1.pesos == null) { Debug.LogError("Error: ia1.pesos es null"); }
+
+        // Copiar los biases del coche original
+        if (ia1.biases != null)
         {
-            r.GetComponent<IA>().biases[i] = ia1.biases[i];
+            for (int i = 0; i < ia1.biases.Length; i++)
+            {
+                if (ia1.biases[i] != null)
+                {
+                    r.GetComponent<IA>().biases[i] = ia1.biases[i];
+                }
+                else
+                {
+                    Debug.LogError("Error: ia1.biases[" + i + "] es null");
+                }
+            }
         }
 
-        for (int i = 0; i < ia1.pesos.Length; i++)
+        // Copiar los pesos del coche original
+        if (ia1.pesos != null)
         {
-            r.GetComponent<IA>().pesos[i] = ia1.pesos[i];
+            for (int i = 0; i < ia1.pesos.Length; i++)
+            {
+                if (ia1.pesos[i] != null)
+                {
+                    r.GetComponent<IA>().pesos[i] = ia1.pesos[i];
+                }
+                else
+                {
+                    Debug.LogError("Error: ia1.pesos[" + i + "] es null");
+                }
+            }
         }
-        return r;
+
+        return r;  // Retornar el coche copiado
     }
 }
